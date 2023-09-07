@@ -1,8 +1,8 @@
 const express = require("express");
 const port = 420;
 const app = express();
-const authRoute = require("./auth/usercontroller");
-const inventoryRouter = require("./inventory-management/inventoryController");
+const authRoute = require("./auth/controller");
+const inventoryRouter = require("./inventory-management/controller");
 const { pgPool } = require("./postgresql/dbconstants");
 const { InvoiceLines } = require("./invoices/invoiveModels");
 
