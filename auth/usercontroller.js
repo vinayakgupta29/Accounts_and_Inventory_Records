@@ -83,7 +83,6 @@ authRouter.post("/login", async (req, res) => {
     await client.query("BEGIN");
     const { username, password } = req.body;
 
-    // Check if the user exists
     const userResult = await client.query(
       "SELECT * FROM users WHERE username = $1;",
       [username]
@@ -97,17 +96,14 @@ authRouter.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid username" });
     }
 
-    // Compare the entered password with the stored hashed password
     const passwordMatch = await bcrypt.compare(password, user.password);
 
-    // If the passwords do not match
     if (!passwordMatch) {
       await client.query("ROLLBACK");
       client.release();
       return res.status(401).json({ error: "Invalid  password" });
     }
 
-    // Passwords match, user is authenticated
     await client.query("COMMIT");
     client.release();
     res.status(200).json({
