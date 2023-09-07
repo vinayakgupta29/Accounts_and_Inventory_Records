@@ -2,51 +2,41 @@ require("dotenv").config();
 const bcrypt = require("bcrypt");
 const express = require("express");
 const authRouter = express.Router();
-const Pool = require("../db_controllers/dbconstants");
-const Token = require("./middleware/tokenhandler");
-
-const createUserTableQuery = `
-  CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    username VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    password VARCHAR(255) NOT NULL,
-
-    GSTIN VARCHAR(255) NOT NULL, 
-    Phone VARCHAR(255) NOT NULL,
-    Address VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  );
-`;
-
-Pool.query(createUserTableQuery)
-  .then(() => {
-    console.log("User table created successfully");
-  })
-  .catch((error) => {
-    console.error("Error creating user table:", error);
-  });
+const Token = require("../middleware/tokenhandler");
+const { Users } = require("./usermodel");
+const { pgPool } = require("../postgresql/dbconstants");
 
 authRouter.post("/signup", async (req, res) => {
+  const pool = req.pgPool;
+  const client = await pool.connect(); // Acquire a client from the pool
+
   try {
+    // Begin the transaction
+    await client.query("BEGIN");
+
+    await Users.createTable(client); // Use the client for the transaction
+
     const newUser = {
-      name: req.body.name,
-      username: req.body.username,
-      email: req.body.email,
-      password: req.body.password,
-      gstin: req.body.gstin,
-      phone: req.body.phone,
-      address: req.body.address,
+      name: req.body.name.trim(),
+      username: req.body.username.trim(),
+      email: req.body.email.trim(),
+      password: req.body.password.trim(),
+      gstin: req.body.gstin.trim(),
+      pan: req.body.pan.trim(),
+      adhaar: req.body.aadhaar.trim(),
+      phone: req.body.phone.trim(),
+      address: req.body.address.trim(),
     };
-    Pool.connect();
 
     // Check if the username already exists
-    const existingUser = await pool.query(
+    const existingUser = await client.query(
       "SELECT * FROM users WHERE username = $1",
       [newUser.username]
     );
+
     if (existingUser.rows.length > 0) {
+      await client.query("ROLLBACK"); // Rollback the transaction
+      client.release(); // Release the client back to the pool
       return res.status(409).json({ error: "Username already exists" });
     }
 
@@ -54,44 +44,57 @@ authRouter.post("/signup", async (req, res) => {
     const hashedPassword = await bcrypt.hash(newUser.password, 10);
 
     // Insert the new user into the database
-    await pool.query(
-      "INSERT INTO users (name, username, email, password, GSTIN, Phone, Address) VALUES ($1, $2, $3,$4,$5,$6,$7)",
-      [
-        newUser.name,
-        newUser.username,
-        newUser.email,
-        hashedPassword,
-        newUser.gstin,
-        newUser.phone,
-        newUser.address,
-      ]
+    await Users.insertRecord(
+      client,
+      newUser.name,
+      newUser.username,
+      hashedPassword,
+      newUser.gstin,
+      newUser.phone,
+      newUser.address,
+      newUser.pan,
+      newUser.adhaar
     );
+
+    // Commit the transaction
+    await client.query("COMMIT");
+
+    client.release(); // Release the client back to the pool
 
     res
       .status(201)
       .json({ message: "User created successfully", user: newUser });
-    Pool.end();
   } catch (error) {
-    Pool.end();
     console.error("Error creating user:", error);
+
+    // Rollback the transaction in case of an error
+    await client.query("ROLLBACK");
+
+    client.release(); // Release the client back to the pool
+
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
 authRouter.post("/login", async (req, res) => {
+  const pool = req.pgPool;
+  const client = await pool.connect();
   try {
+    await client.query("BEGIN");
     const { username, password } = req.body;
 
     // Check if the user exists
-    const userResult = await Pool.query(
-      "SELECT * FROM users WHERE username = $1",
+    const userResult = await client.query(
+      "SELECT * FROM users WHERE username = $1;",
       [username]
     );
     const user = userResult.rows[0];
 
     // If the user does not exist
     if (!user) {
-      return res.status(401).json({ error: "Invalid username or password" });
+      await client.query("ROLLBACK");
+      client.release();
+      return res.status(401).json({ error: "Invalid username" });
     }
 
     // Compare the entered password with the stored hashed password
@@ -99,15 +102,23 @@ authRouter.post("/login", async (req, res) => {
 
     // If the passwords do not match
     if (!passwordMatch) {
-      return res.status(401).json({ error: "Invalid username or password" });
+      await client.query("ROLLBACK");
+      client.release();
+      return res.status(401).json({ error: "Invalid  password" });
     }
 
     // Passwords match, user is authenticated
-    res
-      .status(200)
-      .json({ message: "Login successful", token: Token.createToken() });
+    await client.query("COMMIT");
+    client.release();
+    res.status(200).json({
+      message: "Login successful",
+      token: Token.createToken(username),
+    });
   } catch (error) {
+    await client.query("ROLLBACK");
+    client.release();
     console.error("Error logging in:", error);
+
     res.status(500).json({ error: "Internal server error" });
   }
 });

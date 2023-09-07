@@ -1,5 +1,5 @@
 const { Pool } = require("pg");
-const pool = new Pool({
+const pgPool = new Pool({
   user: process.env.USER,
   host: process.env.HOST,
   database: process.env.DATABASE,
@@ -7,4 +7,4 @@ const pool = new Pool({
   port: process.env.PORT, // Default PostgreSQL port is 5432
 });
 
-module.export = { pool };
+module.exports = { pgPool };

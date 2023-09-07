@@ -2,15 +2,48 @@ const express = require("express");
 const port = 420;
 const app = express();
 const authRoute = require("./auth/usercontroller");
-const ctrl = require("./db_controllers/invoivecontroller");
+const inventoryRouter = require("./inventory-management/inventoryController");
+const { pgPool } = require("./postgresql/dbconstants");
+const { InvoiceLines } = require("./invoices/invoiveModels");
 app.listen(port, () => {
   console.log(`it's running on http://localhost:${port}`);
 });
 
 app.use(express.json());
-
+// Express middleware to use the pool in your routes
+app.use((req, res, next) => {
+  req.pgPool = pgPool; // Attach the pool to the request object
+  next();
+});
 app.use("/auth", authRoute);
+app.use("/inventory", inventoryRouter);
 
+const result = pgPool.query(
+  ` SELECT vins_invoice_lines.*,vins_inventory.product_name,vins_inventory.unit_price
+   FROM vins_invoice_lines 
+   JOIN vins_inventory 
+   ON vins_invoice_lines.product_id = vins_inventory.id;`,
+  (err, res) => {
+    if (err) {
+      console.error("Error executing query:", err);
+      return;
+    }
+    if (!res || !res.rows) {
+      console.error("No rows found in the query result.");
+      return;
+    }
+    // Map the result rows to JSON objects
+    const jsonResult = res.rows.map((row) => ({
+      invoiceLineId: row.invoice_id, 
+      product_name: row.product_name,
+      unit_price: row.unit_price,
+    }));
+
+    console.log("json", jsonResult);
+    return jsonResult;
+  }
+);
+console.log(result);
 // Handle POST request to insert an invoice
 app.post("/insertInvoice", (req, res) => {
   const { custName, gstIN, Invoice } = req.body;
