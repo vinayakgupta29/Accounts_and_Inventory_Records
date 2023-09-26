@@ -5,12 +5,12 @@ const Users = {
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         username VARCHAR(50) UNIQUE NOT NULL,
-        password VARCHAR(100) NOT NULL,
+        password TEXT NOT NULL,
         gstIn VARCHAR(100) NOT NULL,
         pan_card VARCHAR(50) NOT NULL,
         adhaar VARCHAR(50) NOT NULL,
-        phone VARCHAR (12) NOT NULL,
-        address VARCHAR(255) NOT NULL
+        phone VARCHAR (13) NOT NULL,
+        address TEXT NOT NULL
     );`;
       await client.query(sql);
     } catch (e) {

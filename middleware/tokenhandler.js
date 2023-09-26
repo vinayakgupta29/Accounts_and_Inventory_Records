@@ -1,6 +1,6 @@
 require("dotenv").config();
-const tokenRouter = require("express").Router();
 const jwt = require("jsonwebtoken");
+const { pgPool } = require("../postgresql/dbconstants");
 
 var maxage = 1 * 60 * 60;
 
@@ -24,43 +24,34 @@ function reNewToken(oldToken) {
 }
 
 async function authenticateToken(req, res, next) {
-  const authHeader = req.headers["authorization"];
-  console.info(req.headers);
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Unauthorized: Invalid token" });
+  const token = req.header("Authorization"); // Assuming the token is sent in the "Authorization" header
+
+  if (!token) {
+    return res.status(401).json({ error: "Token not provided" });
   }
-  const token = authHeader.split(" ")[1];
+
   try {
-    await client.connect();
-    const db = client.db("Sportyfy");
-    const users = db.collection("Users");
     const decoded = jwt.verify(token, process.env.TOKEN_KEY);
-    const user = await users.findOne({ _id: decoded.username });
-    if (!user)
-      return res.status(401).json({ error: "Unauthorized : user not found" });
-    req.user = user;
+
+    // Assuming you have a 'users' table with a 'username' column in your database
+    const client = await pgPool.connect();
+    const userQuery = "SELECT * FROM users WHERE username = $1";
+    const { rows } = await client.query(userQuery, [decoded.username]);
+    client.release();
+
+    if (rows.length === 0) {
+      return res.status(401).json({ error: "User not found" });
+    }
+
+    // Attach the decoded payload to the request for use in other middleware or routes
+    req.user = decoded;
+
+    // Continue to the next middleware or route
     next();
-  } catch (err) {
-    console.info("Error during Authentication: ", err);
-    return res.status(403).json({ error: "Forbidden: INvalid Token" });
-  } finally {
-    client.close();
-    console.info("Connection to User Closed");
+  } catch (error) {
+    console.error("Error authenticating token:", error);
+    return res.status(401).json({ error: "Invalid token" });
   }
 }
-
-tokenRouter.get("/newToken", (req, res) => {
-  const oldToken = req.header.Authorization;
-
-  try {
-    const newToken = reNewToken(oldToken);
-    res.setHeader("Authoization", newToken);
-    res.sendStatus(200);
-    res.status(200).json({ token: newToken });
-  } catch (e) {
-    console.error("Error renewing token: ", e);
-    res.sendStatus(500);
-  }
-});
 
 module.exports = { createToken, reNewToken, authenticateToken };
