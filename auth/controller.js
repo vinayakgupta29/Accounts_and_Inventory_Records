@@ -36,7 +36,7 @@ authRouter.post("/signup", async (req, res) => {
 
     if (existingUser.rows.length > 0) {
       await client.query("ROLLBACK"); // Rollback the transaction
-      client.release(); // Release the client back to the pool
+      await client.release(); // Release the client back to the pool
       return res.status(409).json({ error: "Username already exists" });
     }
 
@@ -59,7 +59,7 @@ authRouter.post("/signup", async (req, res) => {
     // Commit the transaction
     await client.query("COMMIT");
 
-    client.release(); // Release the client back to the pool
+    await client.release(); // Release the client back to the pool
 
     res
       .status(201)
@@ -70,7 +70,7 @@ authRouter.post("/signup", async (req, res) => {
     // Rollback the transaction in case of an error
     await client.query("ROLLBACK");
 
-    client.release(); // Release the client back to the pool
+    await client.release(); // Release the client back to the pool
 
     res.status(500).json({ error: "Internal server error" });
   }
@@ -92,7 +92,7 @@ authRouter.post("/login", async (req, res) => {
     // If the user does not exist
     if (!user) {
       await client.query("ROLLBACK");
-      client.release();
+      await client.release();
       return res.status(401).json({ error: "Invalid username" });
     }
 
@@ -100,19 +100,19 @@ authRouter.post("/login", async (req, res) => {
 
     if (!passwordMatch) {
       await client.query("ROLLBACK");
-      client.release();
+      await client.release();
       return res.status(401).json({ error: "Invalid  password" });
     }
 
     await client.query("COMMIT");
-    client.release();
+    await client.release();
     res.status(200).json({
       message: "Login successful",
       token: Token.createToken(username),
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    client.release();
+    await client.release();
     console.error("Error logging in:", error);
 
     res.status(500).json({ error: "Internal server error" });

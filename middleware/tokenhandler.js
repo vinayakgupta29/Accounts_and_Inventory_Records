@@ -37,7 +37,7 @@ async function authenticateToken(req, res, next) {
     const client = await pgPool.connect();
     const userQuery = "SELECT * FROM users WHERE username = $1";
     const { rows } = await client.query(userQuery, [decoded.username]);
-    client.release();
+    await client.release();
 
     if (rows.length === 0) {
       return res.status(401).json({ error: "User not found" });
