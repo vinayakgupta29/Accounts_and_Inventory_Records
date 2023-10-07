@@ -2,7 +2,7 @@ const Products = {
   createTable: async function (client, username) {
     const sql = `CREATE TABLE IF NOT EXISTS ${username}_inventory (
         id SERIAL PRIMARY KEY,
-        product_name VARCHAR(255) NOT NULL,
+        product_name TEXT NOT NULL,
         quantity INT NOT NULL,
         unit_price DECIMAL(10,2) NOT NULL);`;
     await client.query(sql);

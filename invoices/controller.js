@@ -1,16 +1,10 @@
-const { check, query, validationResult } = require("express-validator");
-const { Customer } = require("../customers/customerModel");
+const { query, validationResult } = require("express-validator");
+const zlib = require("zlib");
+const util = require("util");
 const { generateInvoiceId } = require("../id_controller/id_generator");
-const { pgPool } = require("../postgresql/dbconstants");
-const {
-  InvoiceActions,
-  getAmount,
-  formatISODate,
-  renderGraph,
-} = require("./ctrlFunc");
-const { Invoice, InvoiceLines } = require("./invoiveModels");
+const { InvoiceActions, getAmount, renderGraph } = require("./ctrlFunc");
+const { Invoice } = require("./invoiveModels");
 const { cleanAlphanumeric } = require("../server-security/server-security");
-const chartjs = require("chartjs");
 const path = require("path");
 const invoiceRouter = require("express").Router();
 
@@ -82,15 +76,27 @@ invoiceRouter.get(
       }
       const username = req.query.username;
       const action = req.query.action;
-      const sql = `SELECT * FROM ${username}_invoices ${InvoiceActions[action](
+      const sql = `SELECT * ,json_build_object(
+        'cust_id', cu.cust_id,
+        'name', cu.name,
+        'address', cu.address,
+        'phone_number', cu.phone_number,
+        'email', cu.email,
+        'gstin', cu.gstin,
+        'dealer_type', cu.dealer_type,
+        'pan_card', cu.pan_card,
+        'aadhaar', cu.aadhaar
+      ) AS customer_id FROM ${username}_invoices AS inv ${InvoiceActions[
+        action
+      ](
         sdate,
         endate
-      )};`;
-      //`BETWEEN '${sdate}' AND '${endate}';`; // WHERE date_time BETWEEN ${sdate} AND ${endate}
+      )} JOIN ${username}_customers AS cu on inv.customer_id=cust_id;`; //`BETWEEN '${sdate}' AND '${endate}';`; // WHERE date_time BETWEEN ${sdate} AND ${endate}
       const response = await client.query(sql);
       const responseData = response.rows;
       for (let i = 0; i < responseData.length; i++) {
         const element = responseData[i];
+
         element.lines = [];
         //SQL Query to find the invoice lines of a given invoiceID;
         const sql1 = `SELECT p.product_name AS contents, p.unit_price, il.quantity, il.amount FROM ${username}_invoice_lines AS il
@@ -101,7 +107,16 @@ invoiceRouter.get(
       }
       await client.query("COMMIT");
       await client.release();
-      res.status(200).json({ invoices: responseData });
+      const compressedData = await util.promisify(zlib.gzip)(
+        JSON.stringify({ invoices: responseData })
+      );
+
+      res.setHeader("Content-Encoding", "gzip");
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Vary", "Accept-Encoding");
+      res.setHeader("Content-Length", compressedData.length);
+
+      res.status(200).end(compressedData);
     } catch (e) {
       await client.query("ROLLBACK");
       await client.release();
@@ -145,5 +160,27 @@ invoiceRouter.get("/graph/", async (req, res) => {
 //SELECT p.product_name AS contents, p.unit_price, il.quantity, il.amount FROM vins_invoice_lines AS il
 //JOIN vins_inventory AS p ON p.id = il.product_id
 // WHERE il.invoice_id='txn_002';
+
+invoiceRouter.get("/statement", async (req, res) => {
+  const pool = req.pgPool;
+  const client = await pool.connect();
+  try {
+    const username = req.query.username;
+    const today = new Date();
+    const date1 = new Date(2023, 10, 31);
+    console.log(date1, typeof date1);
+    await client.query("BEGIN");
+    const sql = `SELECT * FROM ${username}_invoices ${InvoiceActions.toAndFromDate(
+      date1,
+      today
+    )};`;
+    const result = await client.query(sql);
+    res.status(200).json({ list: result.rows });
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    res.status(500).json({ error: `error in getting Statement : ${e}` });
+  }
+});
 
 module.exports = invoiceRouter;

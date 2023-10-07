@@ -19,11 +19,12 @@ async function generateInvoiceId(client, username) {
     `SELECT date_time,transaction_id FROM ${username}_invoices ORDER BY date_time LIMIT 50;`
   );
   let date1 = date0;
-  for (let i of response.rows) {
+  for (const i of response.rows) {
     let count = 0;
-    if (Date(i.date_time) === new Date()) {
+    const date2 = Date(i.date_time);
+    if (date2 === date0) {
       date1 = parseFloat(date0.padEnd(23, "0")) + count;
-      if (date1.toString() === i.transaction_id) {
+      if (date1.toString() === i.transaction_id.subString(3)) {
         date1 += 1;
       }
       count++;
