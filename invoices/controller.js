@@ -2,7 +2,11 @@ const { query, validationResult } = require("express-validator");
 const zlib = require("zlib");
 const util = require("util");
 const { generateInvoiceId } = require("../id_controller/id_generator");
-const { InvoiceActions, getAmount, renderGraph } = require("./ctrlFunc");
+const {
+  InvoiceActions,
+  getAmountInsertInvoiceLineRecord,
+  renderGraph,
+} = require("./ctrlFunc");
 const { Invoice } = require("./invoiveModels");
 const { cleanAlphanumeric } = require("../server-security/server-security");
 const path = require("path");
@@ -29,7 +33,12 @@ invoiceRouter.post("/add", async (req, res) => {
     invoice.transaction_id = await generateInvoiceId(client, username);
     await Invoice.insertRecord(client, username, invoice);
     const invoiceLines = invoice.invoiceLines;
-    await getAmount(client, username, invoice.transaction_id, invoiceLines);
+    await getAmountInsertInvoiceLineRecord(
+      client,
+      username,
+      invoice.transaction_id,
+      invoiceLines
+    );
 
     // Commit the transaction
     await client.query("COMMIT");

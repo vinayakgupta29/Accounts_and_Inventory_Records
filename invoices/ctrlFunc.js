@@ -23,7 +23,12 @@ const InvoiceActions = {
   all: () => ``,
 };
 
-async function getAmount(client, username, invoiceId, contents) {
+async function getAmountInsertInvoiceLineRecord(
+  client,
+  username,
+  invoiceId,
+  contents
+) {
   for (let doc of contents) {
     const unit_price = (
       await client.query(
@@ -146,4 +151,9 @@ function renderGraph(chartData, reqLabel) {
       </html>`;
   return html;
 }
-module.exports = { InvoiceActions, getAmount, formatISODate, renderGraph };
+module.exports = {
+  InvoiceActions,
+  getAmountInsertInvoiceLineRecord,
+  formatISODate,
+  renderGraph,
+};
